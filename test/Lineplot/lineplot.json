@@ -1,0 +1,10 @@
+{
+    "tipo": "line",
+    "columnas": {
+        "x": "SEXO",
+        "y": "POBLACION"
+    },
+    "color": "RANGO_EDAD",
+    "titulo": "LINE PLOT",
+    "archivo_html": "./generador_graficos/test/Lineplot/lineplot.html"
+}

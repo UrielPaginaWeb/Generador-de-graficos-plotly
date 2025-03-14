@@ -1,0 +1,10 @@
+{
+    "tipo": "barras",
+    "columnas": {
+        "x": "SEXO",
+        "y": "POBLACION"
+    },
+    "color": "RANGO_EDAD",
+    "titulo": "Distribuci\u00f3n de edades por entidad",
+    "archivo_html": "./generador_graficos/test/Barras/grafico_barras_entidad.html"
+}

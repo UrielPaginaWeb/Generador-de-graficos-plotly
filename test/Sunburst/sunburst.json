@@ -1,0 +1,9 @@
+{
+    "tipo": "sunburst",
+    "jerarquia": [
+        "MUN_NAME"
+    ],
+    "valores": "CONTEO",
+    "titulo": "Sunburst",
+    "archivo_html": "./generador_graficos/test/Sunburst/sunburst.html"
+}
