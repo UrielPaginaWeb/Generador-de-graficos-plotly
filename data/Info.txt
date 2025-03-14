@@ -1,0 +1,44 @@
+Generador de Gráficos con Plotly
+  Carga de datos: Carga archivos CSV y valida las columnas necesarias.
+Generación de gráficos:
+  -Boxplot: Visualiza la distribución de datos.
+  -Gráfico de barras: Muestra comparaciones entre categorías.
+  -Gráfico de líneas: Representa tendencias a lo largo del tiempo o entre categorías.
+  -Sunburst: Visualiza jerarquías y proporciones.
+  
+Exportación: 
+  Los archivo se encuentra en la carpeta test.
+  Guarda los gráficos en formato HTML y los metadatos en JSON.
+
+Bibliotecas de Python con la version (Python 3.13.2):
+  -pandas 
+  -plotly
+  -json
+
+Archivo CSV:
+  El archivo se encuentra en la carpeta data.
+  El archico contiene estas columas:
+  CAUSA_DEF, ANIO_REGIS, ENT_CVE,MUN_CVE,SEXO,RANGO_EDAD,CONTEO,POBLACION,TASA,TASA_TYPE,ENT_NAME,MUN_NAME,Descripcion,TASA_100K,TASA_10K,TASA_1K,TASA_100
+
+¿Cómo funciona?
+  Cargar el archivo CSV:
+    -El código lee un archivo CSV y verifica que tenga las columnas necesarias.
+  Generar gráficos:
+    -Puedes elegir entre diferentes tipos de gráficos (boxplot, barras, líneas, sunburst).
+    -Para cada gráfico, debes especificar las columnas que se usarán en el eje X, el eje Y.
+  Guardar los gráficos:
+    -Los gráficos se guardan en formato HTML para que puedas verlos en tu navegador.
+    -También se guarda un archivo JSON con detalles sobre el gráfico generado.
+
+  __init__: Carga el archivo CSV y verifica que tenga las columnas necesarias.
+  En cada uno de los metodos tambien se genera y guardan los metadatos.
+    -generar_grafico_boxplot: Genera un gráfico de tipo boxplot.
+    -generar_grafico_barras: Genera un gráfico de barras.
+    -generar_grafico_line: Genera un gráfico de líneas.
+    -generar_grafico_sunburst: Genera un gráfico sunburst.
+
+  Estos metodos se mandan a llamar en el objeto: visualizador = VisualizadorDatos('./generador_graficos/data/U_Rates.csv'), que carga el archibo CSV
+  y se manda a llamar asi:  visualizador.generar_grafico_boxplot() que es donde se asigna que columnas se requieren y tambien se asignan las rutas 
+  para guardar los HTML y JSON
+  
+  
