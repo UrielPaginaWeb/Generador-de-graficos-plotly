@@ -5,7 +5,7 @@ import json
 class VisualizadorDatos:
     def __init__(self, csv_path):
         # Cargar el CSV
-        self.df = pd.read_csv(csv_path)
+        self.df = pd.read_csv(csv_path, low_memory=False)
         
         # las columnas tienen que ser iguales al csv
 
@@ -96,7 +96,7 @@ class VisualizadorDatos:
 # Ejemplo de uso
 if __name__ == "__main__":
     # Crear una instancia del visualizador con la ruta al CSV
-    visualizador = VisualizadorDatos('./generador_graficos/data/U_Rates.csv')
+    visualizador = VisualizadorDatos('./data/U_Rates.csv')
 
     # Generar un gráfico boxplot
     visualizador.generar_grafico_boxplot(
@@ -104,8 +104,8 @@ if __name__ == "__main__":
         columna_y='POBLACION',    
         color = 'RANGO_EDAD',
         titulo='Boxplot',
-        output_html='./generador_graficos/test/Boxplot/boxplot.html',
-        output_json='./generador_graficos/test/Boxplot/boxplot.json'
+        output_html='./test/Boxplot/boxplot.html',
+        output_json='./test/Boxplot/boxplot.json'
     )
     
     # Generar un gráfico de barras
@@ -114,8 +114,8 @@ if __name__ == "__main__":
         columna_y='POBLACION',    
         color = 'RANGO_EDAD',
         titulo='Distribución de edades por entidad',
-        output_html='./generador_graficos/test/Barras/grafico_barras_entidad.html',
-        output_json='./generador_graficos/test/Barras/grafico_barras_entidad.json'
+        output_html='./test/Barras/grafico_barras_entidad.html',
+        output_json='./test/Barras/grafico_barras_entidad.json'
     )
 
     # Generar un gráfico lineplot
@@ -124,8 +124,8 @@ if __name__ == "__main__":
         columna_y='POBLACION',   
         color = 'RANGO_EDAD',  
         titulo='LINE PLOT',
-        output_html='./generador_graficos/test/Lineplot/lineplot.html',
-        output_json='./generador_graficos/test/Lineplot/lineplot.json'
+        output_html='./test/Lineplot/lineplot.html',
+        output_json='./test/Lineplot/lineplot.json'
     )
 
     # Generar un gráfico sunburst
@@ -133,6 +133,6 @@ if __name__ == "__main__":
         jerarquia='MUN_NAME',
         valores='CONTEO',     
         titulo='Sunburst',
-        output_html='./generador_graficos/test/Sunburst/sunburst.html',
-        output_json='./generador_graficos/test/Sunburst/sunburst.json'
+        output_html='./Sunburst/sunburst.html',
+        output_json='./test/Sunburst/sunburst.json'
     )

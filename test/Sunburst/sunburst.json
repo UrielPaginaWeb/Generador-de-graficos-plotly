@@ -5,5 +5,5 @@
     ],
     "valores": "CONTEO",
     "titulo": "Sunburst",
-    "archivo_html": "./generador_graficos/test/Sunburst/sunburst.html"
+    "archivo_html": "./test/Sunburst/sunburst.html"
 }
