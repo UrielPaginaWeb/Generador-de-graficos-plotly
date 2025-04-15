@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import json
+import requests
 
 class VisualizadorDatos:
     def __init__(self, csv_path):
@@ -93,6 +94,27 @@ class VisualizadorDatos:
         with open(output_json, 'w') as json_file:
             json.dump(metadata, json_file, indent=4)
 
+    
+    def generar_mapa(self, geojson_url, locations, featureidkey, color, color_continuous_scale, titulo,  output_html, output_json):
+        geojson_url = requests.get(geojson_url).json()
+
+        fig = px.choropleth(self.df, geojson=geojson_url, locations=locations,featureidkey=featureidkey, color=color,color_continuous_scale=color_continuous_scale, title=titulo)
+        fig.write_html(output_html)
+
+        metadata = {
+            'tipo': 'Mapa',
+            'GeoJson': geojson_url,
+            'Entidades': locations,
+            'Entidades del Json': featureidkey,
+            'color' : color,
+            'Color mapa' : color_continuous_scale,
+            'titulo': titulo,
+            'archivo_html': output_html
+        }
+
+        with open(output_json, 'w') as json_file:
+            json.dump(metadata, json_file, indent=4)
+
 # Ejemplo de uso
 if __name__ == "__main__":
     # Crear una instancia del visualizador con la ruta al CSV
@@ -113,7 +135,7 @@ if __name__ == "__main__":
         columna_x= 'SEXO',
         columna_y='POBLACION',    
         color = 'RANGO_EDAD',
-        titulo='Distribución de edades por entidad',
+        titulo='BARRAS',
         output_html='./test/Barras/grafico_barras_entidad.html',
         output_json='./test/Barras/grafico_barras_entidad.json'
     )
@@ -130,9 +152,9 @@ if __name__ == "__main__":
 
     # Generar un gráfico sunburst
     visualizador.generar_grafico_sunburst(
-        jerarquia='MUN_NAME',
+        jerarquia=['MUN_NAME'],
         valores='CONTEO',     
         titulo='Sunburst',
-        output_html='./Sunburst/sunburst.html',
+        output_html='./test/Sunburst/sunburst.html',
         output_json='./test/Sunburst/sunburst.json'
     )
