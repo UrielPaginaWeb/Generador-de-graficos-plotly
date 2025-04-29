@@ -1,0 +1,10 @@
+{
+  "tipo": "boxplot",
+  "columnas": {
+    "x": "SEXO",
+    "y": "POBLACION"
+  },
+  "color": "RANGO_EDAD",
+  "titulo": "Boxplot",
+  "archivo_html": "./test/Boxplot/boxplot.html"
+}

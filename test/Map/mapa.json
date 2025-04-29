@@ -37715,6 +37715,6 @@
     "Entidades del Json": "properties.name",
     "color": "POBLACION",
     "Color mapa": "burg",
-    "titulo": "MAPA",
+    "titulo": "Mapa",
     "archivo_html": "./test/Map/mapa.html"
 }
