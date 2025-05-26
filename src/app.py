@@ -1,16 +1,24 @@
 from flask import Flask, request, jsonify
 from graficos import VisualizadorDatos
+from datetime import datetime
+from pymongo import MongoClient
 import multiprocessing as mp
 import requests
 import time
 import uuid
 import logging
 import os
+import json
+
+
 
 app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
+
+logger = logging.getLogger("LOGS_INFO")
+logger.setLevel(logging.INFO)
 
 #Se carga el archivo csv
 path_csv = ('./data/U_Rates.csv')
@@ -19,12 +27,68 @@ path_csv = ('./data/U_Rates.csv')
 #onjeto para mandar a llamar la clase
 generador_graficos = VisualizadorDatos(path_csv)
 
-result_queue = mp.Queue()  #queue para la comunicación entre procesos
+result_queue = mp.Queue()  #queue para la comunicacion entre procesos
+
+def conexionMongo():
+    try:
+        client = MongoClient("mongodb://localhost:27017", serverSelectionTimeoutMS=5000)
+        db = client['generador_productos']
+        logs_collection = db['logs']
+        print("Conexion exitosa a MongoDB")
+        return logs_collection
+    except Exception as e:
+        print(f"Error al conectar con MongoDB: {e}")
+        raise
+
+
+def guardar_log_en_json(message: dict):  #se cambio a dict para que reciba un diccionario
+
+    collection = conexionMongo()
+    
+    logsMessage = {
+        "timestamp": datetime.now().isoformat(), #usando la clase datetime 
+        "operation": message.get("OPERATION", ""),
+        "type": message.get("TYPE", ""),
+        "read_time": message.get("READ_TIME", 0),
+        "process_time": message.get("PROCESS_TIME", 0),
+        "arrival_time": message.get("ARRIVAL_TIME", 0),
+        "process_id": message.get("PROCESS_ID", ""),
+        "status": message.get("STATUS", "")
+    }
+
+    # ruta para guardar el archivo json de los logs
+    log_file = "./Logs/logs_graficos.json"
+    
+    # Crear directorio si no existe
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
+    # Inicializar el archivo con una lista vacía si no existe o está corrupto
+    if not os.path.exists(log_file):
+        with open(log_file, 'w') as f:
+            json.dump([], f)  # Crear archivo con un JSON válido (lista vacía)
+
+    # Leer logs existentes
+    with open(log_file, 'r') as f:
+        try:
+            logs = json.load(f)  # Cargar datos existentes
+        except json.decoder.JSONDecodeError:
+            logs = []  # Si el archivo está corrupto, empezar de nuevo
+
+    # Agregar nuevo log y guardar
+    logs.append(logsMessage)
+    with open(log_file, 'w') as f:
+        json.dump(logs, f, indent=4)  # Guardar con formato legible
+
+    logger.info(logsMessage)
+    collection.insert_one(logsMessage) #se inserta en mongo 
+    print("LOGS INSERTADOS EN MONGO")
+    
+   
 
 def generar_grafico_proceso(tipo_grafico, params, process_id, queue):
     try:
         hijo_pid = os.getpid() #se optiene el PID del proceso hijo
-        logger.info(f"[PROCESO HIJO] PID: {hijo_pid} - Iniciando generación de {tipo_grafico}") #informacion cuando inicia 
+        log.info(f"[PROCESO HIJO] PID: {hijo_pid} - Iniciando generacion de {tipo_grafico}") #informacion cuando inicia 
         if tipo_grafico == 'boxplot':
             generador_graficos.generar_grafico_boxplot(**params) #genera el grafico boxplot
         elif tipo_grafico == 'barras':
@@ -35,71 +99,114 @@ def generar_grafico_proceso(tipo_grafico, params, process_id, queue):
             generador_graficos.generar_grafico_sunburst(**params)
         elif tipo_grafico == 'map':
             generador_graficos.generar_mapa(**params)
-        logger.info(f"[PROCESO HIJO] PID: {hijo_pid} - {tipo_grafico} generado con éxito")
+        log.info(f"[PROCESO HIJO] PID: {hijo_pid} - {tipo_grafico} generado con exito")
         queue.put((process_id, {'Mensaje': 'Grafico generado'}))
     except Exception as e:
-        logger.error(f"[PROCESO HIJO] PID: {hijo_pid} - Error: {str(e)}")
+        #logger.error(f"[PROCESO HIJO] PID: {hijo_pid} - Error: {str(e)}")
         queue.put((process_id, {'Mensaje': 'Error', 'grafico no generado': str(e)}))
 
 @app.route('/')
 def index():
     return jsonify({"mensaje":"Servicio en ejecucion"})
 
-@app.route('/boxplot', methods=['POST'])
+@app.route("/boxplot", methods=["POST"])
 def generador_boxplot():
-    
-    process_id = str(uuid.uuid4()) # genera ID único para cada solicitud para crear graficos
-    
+    process_id = str(uuid.uuid4())
     data = request.get_json()
-
-    params = {
-        'columna_x': data['columna_x'],
-        'columna_y': data['columna_y'],
-        'color': data['color'],
-        'titulo': data['titulo'],
-        'output_html': './test/Boxplot/boxplot.html',
-        'output_json': './test/Boxplot/boxplot.json'
-    }
     
-    # Crear y iniciar clase Process para iniciar el proceso
+    arrival_time = time.time()  # Tiempo de llegada de la solicitud
+    
+    params = {
+        "columna_x": data["columna_x"],
+        "columna_y": data["columna_y"],
+        "color": data["color"],
+        "titulo": data["titulo"],
+        "output_html": "./test/Boxplot/boxplot.html",
+        "output_json": "./test/Boxplot/boxplot.json",
+    }
+
+    # Crear y iniciar proceso
     p = mp.Process(
         target=generar_grafico_proceso,
-        args=('boxplot', params, process_id, result_queue)
+        args=("boxplot", params, process_id, result_queue),
     )
     p.start()
-    
     # Esperar resultado con timeout
     timeStart = time.time()
     timeOut = 30  # segundos
-    
+
     while True:
         try:
-            # Revisar la cola sin bloquear
-             #empty() devuelve True si la cola está vacía.
-            if not result_queue.empty(): 
-                current_task_id, result = result_queue.get_nowait()  #se recupera un elemento de la cola
-                if current_task_id == process_id: #se verifica que el elemento coincida con su id
-                    p.join()  # Esperar a que termine el proceso
+            if not result_queue.empty():
+                current_task_id, result = result_queue.get_nowait() #se recupera un elemento de la cola
+                if current_task_id == process_id:  #se verifica que el elemento coincida con su id
+                    end_process_time = time.time()
+                    process_time = end_process_time - timeStart
+                    
+                    # Log de Exito
+                    message_info = {
+                        "OPERATION": "CREATE_PROCESS",
+                        "TYPE": "BOXPLOT",
+                        "READ_TIME": end_process_time - timeStart,
+                        "PROCESS_TIME": process_time,
+                        "ARRIVAL_TIME": arrival_time,
+                        "PROCESS_ID": process_id,
+                        "STATUS": "LOG EXITO"
+                    }
+                    guardar_log_en_json(message_info)
+                    
+                    p.join()
                     return jsonify(result)
-            
+
             # Verificar timeout
-            if time.time() - timeStart > timeOut: #Verifica si se pasa del tiempo de 30s
-                p.terminate() #termina el proceso 
-                return jsonify({'Error': 'Tiempo del proceso agotado'}), 504
+            if time.time() - timeStart > timeOut:
+                end_process_time = time.time()
+                process_time = end_process_time - timeStart
                 
-            time.sleep(0.1)  # Pequeña pausa para evitar CPU al 100%
-            
+                # Log de timeout
+                message_info = {
+                    "OPERATION": "CREATE_PROCESS",
+                    "TYPE": "BOXPLOT",
+                    "READ_TIME": end_process_time - timeStart,
+                    "PROCESS_TIME": process_time,
+                    "ARRIVAL_TIME": arrival_time,
+                    "PROCESS_ID": process_id,
+                    "STATUS": "LOG TIMEOUT"
+                }
+                guardar_log_en_json(message_info)
+                
+                p.terminate()
+                return jsonify({"Error": "Tiempo del proceso agotado"}), 504
+
+            time.sleep(0.1)
+
         except Exception as e:
+            end_process_time = time.time()
+            process_time = end_process_time - timeStart
+            
+            # Log de error
+            message_info = {
+                "OPERATION": "CREATE_PROCESS",
+                "TYPE": "BOXPLOT",
+                "READ_TIME": end_process_time - timeStart,
+                "PROCESS_TIME": process_time,
+                "ARRIVAL_TIME": arrival_time,
+                "PROCESS_ID": process_id,
+                "STATUS": f"ERROR: {str(e)}"
+            }
+            guardar_log_en_json(message_info)
+            
             p.terminate()
-            return jsonify({'Error': str(e)}), 500
+            return jsonify({"Error": str(e)}), 500
 
 #EDPOINT BARRAS
 @app.route('/barras', methods=['POST'])
 def generador_barras():
     
-    process_id = str(uuid.uuid4()) # genera ID único para cada solicitud para crear graficos
+    process_id = str(uuid.uuid4()) # genera ID ├║nico para cada solicitud para crear graficos
     
     data = request.get_json()
+    arrival_time = time.time()  # Tiempo de llegada de la solicitud
 
     params = {
         'columna_x': data['columna_x'],
@@ -116,40 +223,82 @@ def generador_barras():
         args=('barras', params, process_id, result_queue)
     )
     p.start()
-    
-    # Esperar resultado con timeout
     timeStart = time.time()
     timeOut = 30  # segundos
-    
+
     while True:
         try:
-            # Revisar la cola sin bloquear
-             #empty() devuelve True si la cola está vacía.
-            if not result_queue.empty(): 
-                current_task_id, result = result_queue.get_nowait()  #se recupera un elemento de la cola
-                if current_task_id == process_id: #se verifica que el elemento coincida con su id
-                    p.join()  # Esperar a que termine el proceso
+            if not result_queue.empty():
+                current_task_id, result = result_queue.get_nowait() #se recupera un elemento de la cola
+                if current_task_id == process_id:  #se verifica que el elemento coincida con su id
+                    end_process_time = time.time()
+                    process_time = end_process_time - timeStart
+                    
+                    # Log de Exito
+                    message_info = {
+                        "OPERATION": "CREATE_PROCESS",
+                        "TYPE": "BARRAS",
+                        "READ_TIME": end_process_time - timeStart,
+                        "PROCESS_TIME": process_time,
+                        "ARRIVAL_TIME": arrival_time,
+                        "PROCESS_ID": process_id,
+                        "STATUS": "LOG EXITO"
+                    }
+                    guardar_log_en_json(message_info)
+                    
+                    p.join()
                     return jsonify(result)
-            
+
             # Verificar timeout
-            if time.time() - timeStart > timeOut: #Verifica si se pasa del tiempo de 30s
-                p.terminate() #termina el proceso 
-                return jsonify({'Error': 'Tiempo del proceso agotado'}), 504
+            if time.time() - timeStart > timeOut:
+                end_process_time = time.time()
+                process_time = end_process_time - timeStart
                 
-            time.sleep(0.1)  # Pequeña pausa para evitar CPU al 100%
-            
+                # Log de timeout
+                message_info = {
+                    "OPERATION": "CREATE_PROCESS",
+                    "TYPE": "BARRAS",
+                    "READ_TIME": end_process_time - timeStart,
+                    "PROCESS_TIME": process_time,
+                    "ARRIVAL_TIME": arrival_time,
+                    "PROCESS_ID": process_id,
+                    "STATUS": "LOG TIMEOUT"
+                }
+                guardar_log_en_json(message_info)
+                
+                p.terminate()
+                return jsonify({"Error": "Tiempo del proceso agotado"}), 504
+
+            time.sleep(0.1)
+
         except Exception as e:
+            end_process_time = time.time()
+            process_time = end_process_time - timeStart
+            
+            # Log de error
+            message_info = {
+                "OPERATION": "CREATE_PROCESS",
+                "TYPE": "BARRAS",
+                "READ_TIME": end_process_time - timeStart,
+                "PROCESS_TIME": process_time,
+                "ARRIVAL_TIME": arrival_time,
+                "PROCESS_ID": process_id,
+                "STATUS": f"ERROR: {str(e)}"
+            }
+            guardar_log_en_json(message_info)
+            
             p.terminate()
-            return jsonify({'Error': str(e)}), 500
+            return jsonify({"Error": str(e)}), 500
 
 
 #EDPOINT LINEPLOT
 @app.route('/lineplot', methods=['POST'])
 def generador_lineplot():
     
-    process_id = str(uuid.uuid4()) # genera ID único para cada solicitud para crear graficos
+    process_id = str(uuid.uuid4()) # genera ID Unico para cada solicitud para crear graficos
     
     data = request.get_json()
+    arrival_time = time.time()  # Tiempo de llegada de la solicitud
 
     params = {
         'columna_x': data['columna_x'],
@@ -167,38 +316,81 @@ def generador_lineplot():
     )
     p.start()
     
-    # Esperar resultado con timeout
     timeStart = time.time()
     timeOut = 30  # segundos
-    
+
     while True:
         try:
-            # Revisar la cola sin bloquear
-             #empty() devuelve True si la cola está vacía.
-            if not result_queue.empty(): 
-                current_task_id, result = result_queue.get_nowait()  #se recupera un elemento de la cola
-                if current_task_id == process_id: #se verifica que el elemento coincida con su id
-                    p.join()  # Esperar a que termine el proceso
+            if not result_queue.empty():
+                current_task_id, result = result_queue.get_nowait() #se recupera un elemento de la cola
+                if current_task_id == process_id:  #se verifica que el elemento coincida con su id
+                    end_process_time = time.time()
+                    process_time = end_process_time - timeStart
+                    
+                    # Log de Exito
+                    message_info = {
+                        "OPERATION": "CREATE_PROCESS",
+                        "TYPE": "LINEPLOT",
+                        "READ_TIME": end_process_time - timeStart,
+                        "PROCESS_TIME": process_time,
+                        "ARRIVAL_TIME": arrival_time,
+                        "PROCESS_ID": process_id,
+                        "STATUS": "LOG EXITO"
+                    }
+                    guardar_log_en_json(message_info)
+                    
+                    p.join()
                     return jsonify(result)
-            
+
             # Verificar timeout
-            if time.time() - timeStart > timeOut: #Verifica si se pasa del tiempo de 30s
-                p.terminate() #termina el proceso 
-                return jsonify({'Error': 'Tiempo del proceso agotado'}), 504
+            if time.time() - timeStart > timeOut:
+                end_process_time = time.time()
+                process_time = end_process_time - timeStart
                 
-            time.sleep(0.1)  # Pequeña pausa para evitar CPU al 100%
-            
+                # Log de timeout
+                message_info = {
+                    "OPERATION": "CREATE_PROCESS",
+                    "TYPE": "LINEPLOT",
+                    "READ_TIME": end_process_time - timeStart,
+                    "PROCESS_TIME": process_time,
+                    "ARRIVAL_TIME": arrival_time,
+                    "PROCESS_ID": process_id,
+                    "STATUS": "LOG TIMEOUT"
+                }
+                guardar_log_en_json(message_info)
+                
+                p.terminate()
+                return jsonify({"Error": "Tiempo del proceso agotado"}), 504
+
+            time.sleep(0.1)
+
         except Exception as e:
+            end_process_time = time.time()
+            process_time = end_process_time - timeStart
+            
+            # Log de error
+            message_info = {
+                "OPERATION": "CREATE_PROCESS",
+                "TYPE": "LINEPLOT",
+                "READ_TIME": end_process_time - timeStart,
+                "PROCESS_TIME": process_time,
+                "ARRIVAL_TIME": arrival_time,
+                "PROCESS_ID": process_id,
+                "STATUS": f"ERROR: {str(e)}"
+            }
+            guardar_log_en_json(message_info)
+            
             p.terminate()
-            return jsonify({'Error': str(e)}), 500
+            return jsonify({"Error": str(e)}), 500
 
 #EDPOINT SUNBURST
 @app.route('/sunburst', methods=['POST'])
 def generador_sunburst():
     
-    process_id = str(uuid.uuid4()) # genera ID único para cada solicitud para crear graficos
+    process_id = str(uuid.uuid4()) # genera ID unico para cada solicitud para crear graficos
     
     data = request.get_json()
+    arrival_time = time.time()  # Tiempo de llegada de la solicitud
 
     params = {
         'jerarquia': data['jerarquia'],
@@ -215,38 +407,81 @@ def generador_sunburst():
     )
     p.start()
     
-    # Esperar resultado con timeout
     timeStart = time.time()
     timeOut = 30  # segundos
-    
+
     while True:
         try:
-            # Revisar la cola sin bloquear
-             #empty() devuelve True si la cola está vacía.
-            if not result_queue.empty(): 
-                current_task_id, result = result_queue.get_nowait()  #se recupera un elemento de la cola
-                if current_task_id == process_id: #se verifica que el elemento coincida con su id
-                    p.join()  # Esperar a que termine el proceso
+            if not result_queue.empty():
+                current_task_id, result = result_queue.get_nowait() #se recupera un elemento de la cola
+                if current_task_id == process_id:  #se verifica que el elemento coincida con su id
+                    end_process_time = time.time()
+                    process_time = end_process_time - timeStart
+                    
+                    # Log de Exito
+                    message_info = {
+                        "OPERATION": "CREATE_PROCESS",
+                        "TYPE": "SUNBURST",
+                        "READ_TIME": end_process_time - timeStart,
+                        "PROCESS_TIME": process_time,
+                        "ARRIVAL_TIME": arrival_time,
+                        "PROCESS_ID": process_id,
+                        "STATUS": "LOG EXITO"
+                    }
+                    guardar_log_en_json(message_info)
+                    
+                    p.join()
                     return jsonify(result)
-            
+
             # Verificar timeout
-            if time.time() - timeStart > timeOut: #Verifica si se pasa del tiempo de 30s
-                p.terminate() #termina el proceso 
-                return jsonify({'Error': 'Tiempo del proceso agotado'}), 504
+            if time.time() - timeStart > timeOut:
+                end_process_time = time.time()
+                process_time = end_process_time - timeStart
                 
-            time.sleep(0.1)  # Pequeña pausa para evitar CPU al 100%
-            
+                # Log de timeout
+                message_info = {
+                    "OPERATION": "CREATE_PROCESS",
+                    "TYPE": "SUNBURST",
+                    "READ_TIME": end_process_time - timeStart,
+                    "PROCESS_TIME": process_time,
+                    "ARRIVAL_TIME": arrival_time,
+                    "PROCESS_ID": process_id,
+                    "STATUS": "LOG TIMEOUT"
+                }
+                guardar_log_en_json(message_info)
+                
+                p.terminate()
+                return jsonify({"Error": "Tiempo del proceso agotado"}), 504
+
+            time.sleep(0.1)
+
         except Exception as e:
+            end_process_time = time.time()
+            process_time = end_process_time - timeStart
+            
+            # Log de error
+            message_info = {
+                "OPERATION": "CREATE_PROCESS",
+                "TYPE": "SUNBURST",
+                "READ_TIME": end_process_time - timeStart,
+                "PROCESS_TIME": process_time,
+                "ARRIVAL_TIME": arrival_time,
+                "PROCESS_ID": process_id,
+                "STATUS": f"ERROR: {str(e)}"
+            }
+            guardar_log_en_json(message_info)
+            
             p.terminate()
-            return jsonify({'Error': str(e)}), 500
+            return jsonify({"Error": str(e)}), 500
 
 #EDPOINT MAP
 @app.route('/map', methods=['POST'])
 def generador_mapa():
     
-    process_id = str(uuid.uuid4()) # genera ID único para cada solicitud para crear graficos
+    process_id = str(uuid.uuid4()) # genera ID unico para cada solicitud para crear graficos
     
     data = request.get_json()
+    arrival_time = time.time()  # Tiempo de llegada de la solicitud
 
     params = {
         'geojson_url': 'https://raw.githubusercontent.com/angelnmara/geojson/master/mexicoHigh.json',
@@ -266,101 +501,74 @@ def generador_mapa():
     )
     p.start()
     
-    # Esperar resultado con timeout
     timeStart = time.time()
     timeOut = 30  # segundos
-    
+
     while True:
         try:
-            # Revisar la cola sin bloquear
-             #empty() devuelve True si la cola está vacía.
-            if not result_queue.empty(): 
-                current_task_id, result = result_queue.get_nowait()  #se recupera un elemento de la cola
-                if current_task_id == process_id: #se verifica que el elemento coincida con su id
-                    p.join()  # Esperar a que termine el proceso
+            if not result_queue.empty():
+                current_task_id, result = result_queue.get_nowait() #se recupera un elemento de la cola
+                if current_task_id == process_id:  #se verifica que el elemento coincida con su id
+                    end_process_time = time.time()
+                    process_time = end_process_time - timeStart
+                    
+                    # Log de Exito
+                    message_info = {
+                        "OPERATION": "CREATE_PROCESS",
+                        "TYPE": "MAPA",
+                        "READ_TIME": end_process_time - timeStart,
+                        "PROCESS_TIME": process_time,
+                        "ARRIVAL_TIME": arrival_time,
+                        "PROCESS_ID": process_id,
+                        "STATUS": "LOG EXITO"
+                    }
+                    guardar_log_en_json(message_info)
+                    
+                    p.join()
                     return jsonify(result)
-            
+
             # Verificar timeout
-            if time.time() - timeStart > timeOut: #Verifica si se pasa del tiempo de 30s
-                p.terminate() #termina el proceso 
-                return jsonify({'Error': 'Tiempo del proceso agotado'}), 504
+            if time.time() - timeStart > timeOut:
+                end_process_time = time.time()
+                process_time = end_process_time - timeStart
                 
-            time.sleep(0.1)  # Pequeña pausa para evitar CPU al 100%
-            
+                # Log de timeout
+                message_info = {
+                    "OPERATION": "CREATE_PROCESS",
+                    "TYPE": "MAPA",
+                    "READ_TIME": end_process_time - timeStart,
+                    "PROCESS_TIME": process_time,
+                    "ARRIVAL_TIME": arrival_time,
+                    "PROCESS_ID": process_id,
+                    "STATUS": "LOG TIMEOUT"
+                }
+                guardar_log_en_json(message_info)
+                
+                p.terminate()
+                return jsonify({"Error": "Tiempo del proceso agotado"}), 504
+
+            time.sleep(0.1)
+
         except Exception as e:
+            end_process_time = time.time()
+            process_time = end_process_time - timeStart
+            
+            # Log de error
+            message_info = {
+                "OPERATION": "CREATE_PROCESS",
+                "TYPE": "MAPA",
+                "READ_TIME": end_process_time - timeStart,
+                "PROCESS_TIME": process_time,
+                "ARRIVAL_TIME": arrival_time,
+                "PROCESS_ID": process_id,
+                "STATUS": f"ERROR: {str(e)}"
+            }
+            guardar_log_en_json(message_info)
+            
             p.terminate()
-            return jsonify({'Error': str(e)}), 500
+            return jsonify({"Error": str(e)}), 500
 
-"""""
-@app.route('/boxplot', methods=['POST'])
-def generador_boxplot():
-    #Se obtienen los datos json
-    data = request.get_json()
-    
-    output_html=('./test/Boxplot/boxplot.html')
-    output_json=('./test/Boxplot/boxplot.json')
-    
-    generador_graficos.generar_grafico_boxplot(
-        columna_x= data.get('columna_x'), 
-        columna_y= data.get('columna_y'),    
-        color = data.get('color'),
-        titulo=data.get('titulo'),
-        output_html=output_html,
-        output_json=output_json
-    )
-    return jsonify({"Mensaje": "Grafico boxplot generado"})
-
-@app.route('/barras', methods=['POST'])
-def generador_barras():
-    data = request.get_json()
-
-    output_html=('./test/Barras/barras.html')
-    output_json=('./test/Barras/barras.json')
-
-    generador_graficos.generar_grafico_barras(
-        columna_x= data.get('columna_x'),
-        columna_y= data.get('columna_y'),    
-        color = data.get('color'),
-        titulo= data.get('titulo'),
-        output_html=output_html,
-        output_json=output_json
-    )
-    return jsonify({"Mensaje": "Grafico de barras generado"})
-
-@app.route('/lineplot', methods=['POST'])
-def generador_lineplot():
-    data = request.get_json()
-
-    output_html=('./test/Lineplot/lineplot.html')
-    output_json=('./test/Lineplot/lineplot.json')
-
-    generador_graficos.generar_grafico_line(
-        columna_x= data.get('columna_x'),
-        columna_y= data.get('columna_y'),    
-        color = data.get('color'),
-        titulo= data.get('titulo'),
-        output_html=output_html,
-        output_json=output_json
-    )
-    return jsonify({"Mensaje": "Grafico de lineplot generado"})
-
-@app.route('/sunburst', methods=['POST'])
-def generador_sunburst():
-    data = request.get_json()
-    output_html=('./test/Sunburst/sunburst.html')
-    output_json=('./test/Sunburst/sunburst.json')
-
-    generador_graficos.generar_grafico_sunburst(
-        jerarquia= data.get('jerarquia'),  #Este valor si es unico va dentro de [''] en el json
-        valores= data.get('valores'),     
-        titulo= data.get('titulo'),
-        output_html=output_html,
-        output_json=output_json
-    )
-    return jsonify({"Mensaje": "Grafico de sunburst generado"})
-"""
 
 if __name__ == '__main__':
     mp.freeze_support()
     app.run(host='0.0.0.0', port=5000)
-

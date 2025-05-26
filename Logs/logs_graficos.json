@@ -1,0 +1,62 @@
+[
+    {
+        "timestamp": "2025-05-26T14:52:47.956301",
+        "operation": "CREATE_PROCESS",
+        "type": "BOXPLOT",
+        "read_time": 7.994336128234863,
+        "process_time": 7.994336128234863,
+        "arrival_time": 1748292759.9338226,
+        "process_id": "62edc11a-d563-454a-ba5d-a3f9da6a3b4d",
+        "status": "LOG EXITO"
+    },
+    {
+        "timestamp": "2025-05-26T14:53:59.572831",
+        "operation": "CREATE_PROCESS",
+        "type": "BOXPLOT",
+        "read_time": 7.101222515106201,
+        "process_time": 7.101222515106201,
+        "arrival_time": 1748292832.4397137,
+        "process_id": "797645ca-9d46-4d43-b4a5-1d385d910f8a",
+        "status": "LOG EXITO"
+    },
+    {
+        "timestamp": "2025-05-26T16:09:59.975230",
+        "operation": "CREATE_PROCESS",
+        "type": "SUNBURST",
+        "read_time": 7.789576530456543,
+        "process_time": 7.789576530456543,
+        "arrival_time": 1748297392.1568325,
+        "process_id": "86a89ba4-c72e-4ff4-b4df-93e2a4328fc2",
+        "status": "LOG EXITO"
+    },
+    {
+        "timestamp": "2025-05-26T16:10:13.389708",
+        "operation": "CREATE_PROCESS",
+        "type": "LINEPLOT",
+        "read_time": 6.155264854431152,
+        "process_time": 6.155264854431152,
+        "arrival_time": 1748297407.2235022,
+        "process_id": "afdca237-ade0-4e91-96f8-0b0e4d8a2583",
+        "status": "LOG EXITO"
+    },
+    {
+        "timestamp": "2025-05-26T16:10:29.910992",
+        "operation": "CREATE_PROCESS",
+        "type": "BARRAS",
+        "read_time": 5.2389068603515625,
+        "process_time": 5.2389068603515625,
+        "arrival_time": 1748297424.6639054,
+        "process_id": "a02344ff-b08c-4278-beca-f409456d6419",
+        "status": "LOG EXITO"
+    },
+    {
+        "timestamp": "2025-05-26T16:10:45.887117",
+        "operation": "CREATE_PROCESS",
+        "type": "MAPA",
+        "read_time": 7.100744724273682,
+        "process_time": 7.100744724273682,
+        "arrival_time": 1748297438.7789202,
+        "process_id": "61f4b1a7-df31-43ee-9ebc-3a4e4d752974",
+        "status": "LOG EXITO"
+    }
+]
